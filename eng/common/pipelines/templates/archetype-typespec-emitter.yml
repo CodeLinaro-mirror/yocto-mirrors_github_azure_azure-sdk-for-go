@@ -101,12 +101,18 @@ extends:
       pool: ${{ parameters.Pool }}
       jobs:
       - job: Build
+        variables:
+          emitterNpmrcPath: $(Agent.TempDirectory)/${{ parameters.EmitterPackagePath }}/.npmrc
         steps:
         - template: /eng/common/pipelines/templates/steps/sparse-checkout.yml
           parameters:
             Paths: ${{ parameters.SparseCheckoutPaths }}
 
         - ${{ parameters.InitializationSteps }}
+
+        - template: /eng/common/pipelines/templates/steps/create-authenticated-npmrc.yml
+          parameters:
+            npmrcPath: $(emitterNpmrcPath)
 
         # Initialize-WorkingDirectory.ps1 is responsible for setting the emitterVersion output variable.
         - task: PowerShell@2
@@ -126,6 +132,8 @@ extends:
                 -OutputDirectory "$(Build.ArtifactStagingDirectory)"
                 -UseTypeSpecNext:$${{ parameters.UseTypeSpecNext }}
                 -EmitterPackagePath:${{ parameters.EmitterPackagePath }}
+          env:
+            NPM_CONFIG_USERCONFIG: $(emitterNpmrcPath)
 
         - task: PowerShell@2
           displayName: 'Run build script'
@@ -288,6 +296,7 @@ extends:
           pullRequestTargetBranch: 'main'
           buildArtifactsPath: $(Pipeline.Workspace)/build_artifacts
           branchName: $[stageDependencies.Build.Build.outputs['set_branch_name.branchName']]
+          tspClientNpmrcPath: $(Agent.TempDirectory)/tsp-client/.npmrc
         pool: ${{ parameters.Pool }}
         jobs:
         - job: Initialize
@@ -302,10 +311,16 @@ extends:
           - download: current
             displayName: Download pipeline artifacts
 
+          - template: /eng/common/pipelines/templates/steps/create-authenticated-npmrc.yml
+            parameters:
+              npmrcPath: $(tspClientNpmrcPath)
+
           - pwsh: |
               npm ci
             displayName: Install tsp-client
             workingDirectory: $(Build.SourcesDirectory)/eng/common/tsp-client
+            env:
+              NPM_CONFIG_USERCONFIG: $(tspClientNpmrcPath)
 
           - pwsh: |
               # Resolve EmitterPackageJsonOutputPath to absolute path if it's relative
@@ -529,6 +544,7 @@ extends:
             matrix: ${{ parameters.TestMatrix }}
           variables:
             buildArtifactsPath: $(Pipeline.Workspace)/build_artifacts
+            emitterNpmrcPath: $(Agent.TempDirectory)/${{ parameters.EmitterPackagePath }}/.npmrc
           steps:
           - template: /eng/common/pipelines/templates/steps/sparse-checkout.yml
             parameters:
@@ -540,6 +556,10 @@ extends:
 
           - ${{ parameters.InitializationSteps }}
 
+          - template: /eng/common/pipelines/templates/steps/create-authenticated-npmrc.yml
+            parameters:
+              npmrcPath: $(emitterNpmrcPath)
+
           - task: PowerShell@2
             displayName: 'Run initialize script'
             inputs:
@@ -548,6 +568,8 @@ extends:
               arguments: > 
                 -BuildArtifactsPath '$(buildArtifactsPath)/lock-files'
                 -EmitterPackagePath: ${{ parameters.EmitterPackagePath }}
+            env:
+              NPM_CONFIG_USERCONFIG: $(emitterNpmrcPath)
 
           - task: PowerShell@2
             displayName: 'Run test script'
