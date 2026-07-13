@@ -15,8 +15,8 @@ import (
 type ChangeFeedResponse struct {
 	// ResourceID is the unique identifier for the resource.
 	ResourceID string `json:"_rid"`
-	// Documents is a list of changed documents returned in the change feed.
-	Documents []json.RawMessage `json:"Documents"`
+	// Items is a list of changed documents returned in the change feed.
+	Items [][]byte `json:"-"`
 	// Count is the number of documents returned in this page.
 	Count int `json:"_count"`
 
@@ -43,7 +43,7 @@ func newChangeFeedResponse(resp *http.Response) (ChangeFeedResponse, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotModified {
-		response.Documents = []json.RawMessage{}
+		response.Items = [][]byte{}
 		response.Count = 0
 		return response, nil
 	}
@@ -52,8 +52,21 @@ func newChangeFeedResponse(resp *http.Response) (ChangeFeedResponse, error) {
 	if err != nil {
 		return response, wrapResponseError(err, response.Response)
 	}
+
+	// Documents is unmarshaled separately because the JSON payload contains
+	// document objects, which cannot be decoded directly into [][]byte.
+	aux := struct {
+		Documents []json.RawMessage `json:"Documents"`
+	}{}
 	if err := json.Unmarshal(body, &response); err != nil {
 		return response, wrapResponseError(err, response.Response)
+	}
+	if err := json.Unmarshal(body, &aux); err != nil {
+		return response, wrapResponseError(err, response.Response)
+	}
+	response.Items = make([][]byte, len(aux.Documents))
+	for i, doc := range aux.Documents {
+		response.Items[i] = doc
 	}
 
 	return response, nil
