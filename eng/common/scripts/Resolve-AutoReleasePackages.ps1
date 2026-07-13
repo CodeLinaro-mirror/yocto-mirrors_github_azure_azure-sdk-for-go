@@ -220,7 +220,7 @@ function Invoke-AutoReleaseResolution {
         }
         catch
         {
-          Write-Host "Failed to update release pending status in release plan for package '$name'"
+          Write-Host "Failed to update release pending status in release plan for package '$name'. $($_.Exception.Message)"
         }
       }
       else {
