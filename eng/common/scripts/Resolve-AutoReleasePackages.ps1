@@ -64,6 +64,8 @@ param(
   [string] $AuthToken = $env:GH_TOKEN,
   [string] $AutoReleaseLabel = 'auto-release',
   [string] $BaseBranch = 'main'
+  [string] $PipelineUrl = '',
+  [string] $AzsdkExePath = $env:AZSDK
 )
 
 $ErrorActionPreference = 'Stop'
@@ -190,6 +192,36 @@ function Invoke-AutoReleaseResolution {
         Write-Host "  [$name] changed by PR #$($pr.number) -> releasable."
         Set-PipelineVariable -Name "ReleaseArtifact_$safeName" -Value 'true' -IsOutput
         $matchedArtifacts += $artifact
+
+        # Update release pending status and release pipeline URL in the release plan for this package.
+        # release status is updated as "Released" when the package has been successfully released; here we are marking it as "Approval Pending" to indicate that the release is awaiting approval.
+        try
+        {
+          if($AzsdkExePath)
+          {
+            $sdkPullRequestUrl = $pr.html_url
+            $cliArgs = @("release-plan", "update-release-status", "--package-name", $name, "--language", $LanguageDisplayName, "--status", "Approval Pending", "--sdk-pull-request", $sdkPullRequestUrl)
+            if ($PipelineUrl)
+            {
+                $cliArgs += @("--release-pipeline", $PipelineUrl)
+            }
+
+            & $AzsdkExePath @cliArgs
+            if ($LASTEXITCODE -ne 0)
+            {
+                ## Not all releases have a release plan. So we should not fail the script even if a release plan is missing.
+                Write-Host "Failed to mark release completion for package '$name' using azsdk. Exit code: $LASTEXITCODE"
+            }
+          }
+          else
+          {
+            Write-Host "AzsdkExePath is not set; skipping release plan update for package '$name'."
+          }          
+        }
+        catch
+        {
+          Write-Host "Failed to update release pending status in release plan for package '$name'"
+        }
       }
       else {
         Write-Host "  [$name] not changed by PR #$($pr.number)."
