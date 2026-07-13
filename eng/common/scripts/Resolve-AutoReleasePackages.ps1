@@ -63,7 +63,7 @@ param(
   [string] $Artifacts = $env:AUTORELEASE_ARTIFACTS,
   [string] $AuthToken = $env:GH_TOKEN,
   [string] $AutoReleaseLabel = 'auto-release',
-  [string] $BaseBranch = 'main'
+  [string] $BaseBranch = 'main',
   [string] $PipelineUrl = '',
   [string] $AzsdkExePath = $env:AZSDK
 )
