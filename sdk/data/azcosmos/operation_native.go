@@ -121,17 +121,20 @@ func (d *nativeDriver) awaitCompletion(
 	case <-ctx.Done():
 		// v0.2 has no native operation cancellation. Return promptly without leaking the cgo
 		// cookie or completion payload; the native request continues until its own budget ends.
-		select {
-		case result := <-pending.result:
+		//
+		// abandon() marks the pending operation closed and claims whatever result is buffered
+		// atomically, under its own lock, so this cannot race with the reactor's concurrent
+		// deliver(): either the result was already delivered and abandon() hands it back here, or
+		// deliver() observes closed and releases it itself. A result that lands in that exact
+		// instant is never silently discarded in favor of a cancellation error.
+		if result, ok := pending.abandon(); ok {
 			terminal, err := resultAfterCancellation(ctx.Err(), result)
 			if err != nil {
 				result.release()
 			}
 			return terminal, err
-		default:
-			pending.abandon()
-			return completionResult{}, newOperationCancelledError(ctx.Err(), 0, "")
 		}
+		return completionResult{}, newOperationCancelledError(ctx.Err(), 0, "")
 	}
 }
 
